@@ -1,0 +1,3 @@
+tags:
+  integration:
+    # needs a running StitchDB stack (stitchdb start)

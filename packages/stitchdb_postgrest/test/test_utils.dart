@@ -1,0 +1,17 @@
+/// Shared configuration for the postgrest_client integration tests that run
+/// against the local StitchDB CLI stack.
+///
+/// Requests go through the API gateway, which requires an apikey. The
+/// service_role key is used so the tests have unrestricted access to the test
+/// tables, matching the previous Docker setup where PostgREST ran as the
+/// postgres role.
+library;
+
+import 'package:stitchdb_common/testing.dart';
+
+export 'package:stitchdb_common/testing.dart';
+
+const apiHeaders = {
+  'apikey': localStackServiceRoleKey,
+  'Authorization': 'Bearer $localStackServiceRoleKey',
+};

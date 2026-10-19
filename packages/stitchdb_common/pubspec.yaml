@@ -1,0 +1,23 @@
+name: stitchdb_common
+description: Shared internal utilities used across the StitchDB Dart and Flutter client packages.
+version: 1.0.0
+homepage: 'https://stitchdb.com/docs/sdk/flutter'
+repository: 'https://github.com/stitchdb/stitchdb-flutter'
+issue_tracker: 'https://github.com/stitchdb/stitchdb-flutter/issues'
+topics:
+  - stitchdb
+  - internal
+  - utilities
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+
+resolution: workspace
+
+dependencies:
+  crypto: ^3.0.7
+  meta: ^1.16.0
+
+dev_dependencies:
+  stitchdb_lints: ^1.0.0
+  test: ^1.25.0

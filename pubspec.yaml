@@ -1,0 +1,17 @@
+name: stitchdb_flutter_workspace
+repository: https://github.com/stitchdb/stitchdb-flutter
+publish_to: none
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+
+workspace:
+  - packages/stitchdb
+  - packages/stitchdb_auth
+  - packages/stitchdb_common
+  - packages/stitchdb_flutter
+  - packages/stitchdb_functions
+  - packages/stitchdb_lints
+  - packages/stitchdb_postgrest
+  - packages/stitchdb_realtime
+  - packages/stitchdb_storage

@@ -1,0 +1,545 @@
+part of 'postgrest_builder.dart';
+
+class PostgrestFilterBuilder<T> extends PostgrestTransformBuilder<T> {
+  PostgrestFilterBuilder(super.builder);
+
+  @override
+  PostgrestFilterBuilder<T> copyWithUrl(Uri url) =>
+      PostgrestFilterBuilder(_copyWith(url: url));
+
+  /// Finds all rows which doesn't satisfy the filter.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .not('status', 'eq', 'OFFLINE');
+  /// ```
+  PostgrestFilterBuilder<T> not(String column, String operator, Object? value) {
+    final Uri url;
+    if (value is List) {
+      if (operator == "in") {
+        url = appendSearchParams(
+          column,
+          'not.$operator.(${_cleanFilterArray(value)})',
+        );
+      } else {
+        url = appendSearchParams(
+          column,
+          'not.$operator.{${_cleanFilterArray(value)}}',
+        );
+      }
+    } else {
+      url = appendSearchParams(column, 'not.$operator.$value');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows satisfying at least one of the filters.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .or('status.eq.OFFLINE,username.eq.supabot');
+  /// ```
+  PostgrestFilterBuilder<T> or(String filters, {String? referencedTable}) {
+    final key = referencedTable != null ? '$referencedTable.or' : 'or';
+    final url = appendSearchParams(key, '($filters)');
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose value on the stated [column] exactly matches the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .eq('username', 'supabot');
+  /// ```
+  ///
+  /// For `null` equality, use [isFilter] instead.
+  PostgrestFilterBuilder<T> eq(String column, Object value) {
+    final Uri url;
+    if (value is List) {
+      url = appendSearchParams(column, 'eq.{${_cleanFilterArray(value)}}');
+    } else {
+      url = appendSearchParams(column, 'eq.$value');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose value on the stated [column] doesn't match the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .neq('username', 'supabot');
+  /// ```
+  PostgrestFilterBuilder<T> neq(String column, Object value) {
+    final Uri url;
+    if (value is List) {
+      url = appendSearchParams(column, 'neq.{${_cleanFilterArray(value)}}');
+    } else {
+      url = appendSearchParams(column, 'neq.$value');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose value on the stated [column] is greater than the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('messages')
+  ///     .select()
+  ///     .gt('id', 1);
+  /// ```
+  PostgrestFilterBuilder<T> gt(String column, Object value) {
+    return copyWithUrl(appendSearchParams(column, 'gt.$value'));
+  }
+
+  /// Finds all rows whose value on the stated [column] is greater than or equal to the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('messages')
+  ///     .select()
+  ///     .gte('id', 1);
+  /// ```
+  PostgrestFilterBuilder<T> gte(String column, Object value) {
+    return copyWithUrl(appendSearchParams(column, 'gte.$value'));
+  }
+
+  /// Finds all rows whose value on the stated [column] is less than the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('messages')
+  ///     .select()
+  ///     .lt('id', 2);
+  /// ```
+  PostgrestFilterBuilder<T> lt(String column, Object value) {
+    return copyWithUrl(appendSearchParams(column, 'lt.$value'));
+  }
+
+  /// Finds all rows whose value on the stated [column] is less than or equal to the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('messages')
+  ///     .select()
+  ///     .lte('id', 2);
+  /// ```
+  PostgrestFilterBuilder<T> lte(String column, Object value) {
+    return copyWithUrl(appendSearchParams(column, 'lte.$value'));
+  }
+
+  /// Finds all rows whose value in the stated [column] matches the supplied [pattern] (case sensitive).
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .like('username', '%supa%');
+  /// ```
+  PostgrestFilterBuilder<T> like(String column, String pattern) {
+    return copyWithUrl(appendSearchParams(column, 'like.$pattern'));
+  }
+
+  /// Match only rows where [column] matches all of [patterns] case-sensitively.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .likeAllOf('username', ['%supa%', '%bot%']);
+  /// ```
+  PostgrestFilterBuilder<T> likeAllOf(String column, List<String> patterns) {
+    return copyWithUrl(
+      appendSearchParams(column, 'like(all).{${patterns.join(',')}}'),
+    );
+  }
+
+  /// Match only rows where [column] matches any of [patterns] case-sensitively.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .likeAnyOf('username', ['%supa%', '%bot%']);
+  /// ```
+  PostgrestFilterBuilder<T> likeAnyOf(String column, List<String> patterns) {
+    return copyWithUrl(
+      appendSearchParams(column, 'like(any).{${patterns.join(',')}}'),
+    );
+  }
+
+  /// Finds all rows whose value in the stated [column] matches the supplied [pattern] (case insensitive).
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .ilike('username', '%SUPA%');
+  /// ```
+  PostgrestFilterBuilder<T> ilike(String column, String pattern) {
+    return copyWithUrl(appendSearchParams(column, 'ilike.$pattern'));
+  }
+
+  /// Match only rows where [column] matches all of [patterns] case-insensitively.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .ilikeAllOf('username', ['%supa%', '%bot%']);
+  /// ```
+  PostgrestFilterBuilder<T> ilikeAllOf(String column, List<String> patterns) {
+    return copyWithUrl(
+      appendSearchParams(column, 'ilike(all).{${patterns.join(',')}}'),
+    );
+  }
+
+  /// Match only rows where [column] matches any of [patterns] case-insensitively.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .ilikeAnyOf('username', ['%supa%', '%bot%']);
+  /// ```
+  PostgrestFilterBuilder<T> ilikeAnyOf(String column, List<String> patterns) {
+    return copyWithUrl(
+      appendSearchParams(column, 'ilike(any).{${patterns.join(',')}}'),
+    );
+  }
+
+  /// A check for exact equality (null, true, false)
+  ///
+  /// Finds all rows whose value on the stated [column] exactly match the specified [value].
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .isFilter('data', null);
+  /// ```
+  PostgrestFilterBuilder<T> isFilter(String column, bool? value) {
+    return copyWithUrl(appendSearchParams(column, 'is.$value'));
+  }
+
+  /// Finds all rows whose value on the stated [column] is found on the specified [values].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .inFilter('status', ['ONLINE', 'OFFLINE']);
+  /// ```
+  PostgrestFilterBuilder<T> inFilter(String column, List<dynamic> values) {
+    return copyWithUrl(
+      appendSearchParams(column, 'in.(${_cleanFilterArray(values)})'),
+    );
+  }
+
+  /// Finds all rows whose json, array, or range value on the stated [column] contains the values specified in [value].
+  ///
+  /// Pass an array or use brackets in a string for an inclusive range and
+  /// use parenthesis in a string for an exclusive range:
+  /// ```dart
+  /// // On array columns
+  /// final data = await stitchdb
+  ///   .from('issues')
+  ///   .select()
+  ///   .contains('tags', ['is:open', 'priority:low']);
+  ///
+  /// // On range columns
+  /// // Finds rows where the `during` column contains the range between
+  /// // `2000-01-01 00:00` inclusive and `2000-01-01 23:59` exclusive
+  /// final data = await stitchdb
+  ///   .from('reservations')
+  ///   .select()
+  ///   .contains('during', '[2000-01-01 13:00, 2000-01-01 13:30)');
+  ///
+  /// //On jsonb columns
+  /// final data = await stitchdb
+  ///   .from('users')
+  ///   .select('name')
+  ///   .contains('address', { 'street': 'Melrose Place' });
+  /// ```
+  PostgrestFilterBuilder<T> contains(String column, Object value) {
+    final Uri url;
+    if (value is String) {
+      // range types can be inclusive '[', ']' or exclusive '(', ')' so just
+      // keep it simple and accept a string
+      url = appendSearchParams(column, 'cs.$value');
+    } else if (value is List) {
+      // array
+      url = appendSearchParams(column, 'cs.{${_cleanFilterArray(value)}}');
+    } else {
+      // json
+      url = appendSearchParams(column, 'cs.${json.encode(value)}');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose json, array, or range value on the stated [column] is contained by the specified [value].
+  ///
+  /// Pass an array or use brackets in a string for an inclusive range and
+  /// use parenthesis in a string for an exclusive range
+  /// ```dart
+  /// // On array columns
+  /// final data = await stitchdb
+  ///   .from('classes')
+  ///   .select('name')
+  ///   .containedBy('days', ['monday', 'tuesday', 'wednesday', 'friday']);
+  ///
+  /// // On range columns
+  /// // Finds rows where the `during` column is contained between
+  /// // `2000-01-01 00:00` inclusive and `2000-01-01 23:59` exclusive
+  /// final data = await stitchdb
+  ///   .from('reservations')
+  ///   .select()
+  ///   .containedBy('during', '[2000-01-01 00:00, 2000-01-01 23:59)');
+  ///
+  /// // On jsonb columns
+  /// final data = await stitchdb
+  ///   .from('users')
+  ///   .select('name')
+  ///   .containedBy('address', {'postcode': 90210});
+  /// ```
+  PostgrestFilterBuilder<T> containedBy(String column, Object value) {
+    final Uri url;
+    if (value is String) {
+      // range types can be inclusive '[', ']' or exclusive '(', ')' so just
+      // keep it simple and accept a string
+      url = appendSearchParams(column, 'cd.$value');
+    } else if (value is List) {
+      // array
+      url = appendSearchParams(column, 'cd.{${_cleanFilterArray(value)}}');
+    } else {
+      // json
+      url = appendSearchParams(column, 'cd.${json.encode(value)}');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose range value on the stated [column] is strictly to the left of the specified [range].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .sl('age_range', '[2,25)');
+  /// ```
+  PostgrestFilterBuilder<T> rangeLt(String column, String range) {
+    return copyWithUrl(appendSearchParams(column, 'sl.$range'));
+  }
+
+  /// Finds all rows whose range value on the stated [column] is strictly to the right of the specified [range].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .rangeGt('age_range', '[2,25)');
+  /// ```
+  PostgrestFilterBuilder<T> rangeGt(String column, String range) {
+    return copyWithUrl(appendSearchParams(column, 'sr.$range'));
+  }
+
+  /// Finds all rows whose range value on the stated [column] does not extend to the left of the specified [range].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .rangeGte('age_range', '[2,25)');
+  /// ```
+  PostgrestFilterBuilder<T> rangeGte(String column, String range) {
+    return copyWithUrl(appendSearchParams(column, 'nxl.$range'));
+  }
+
+  /// Finds all rows whose range value on the stated [column] does not extend to the right of the specified [range].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .rangeLte('age_range', '[2,25)');
+  /// ```
+  PostgrestFilterBuilder<T> rangeLte(String column, String range) {
+    return copyWithUrl(appendSearchParams(column, 'nxr.$range'));
+  }
+
+  /// Finds all rows whose range value on the stated [column] is adjacent to the specified [range].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .rangeAdjacent('age_range', '[2,25)');
+  /// ```
+  PostgrestFilterBuilder<T> rangeAdjacent(String column, String range) {
+    return copyWithUrl(appendSearchParams(column, 'adj.$range'));
+  }
+
+  /// Finds all rows whose array or range value on the stated [column] overlaps (has a value in common) with the specified [value].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .overlaps('age_range', '[2,25)');
+  /// ```
+  PostgrestFilterBuilder<T> overlaps(String column, Object value) {
+    final Uri url;
+    if (value is List) {
+      // array
+      url = appendSearchParams(column, 'ov.{${_cleanFilterArray(value)}}');
+    } else {
+      // range types can be inclusive '[', ']' or exclusive '(', ')' so just
+      // keep it simple and accept a string
+      url = appendSearchParams(column, 'ov.$value');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose text or tsvector value on the stated [column] matches the tsquery in [query].
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .textSearch('catchphrase', "'fat' & 'cat'", config: 'english');
+  /// ```
+  PostgrestFilterBuilder<T> textSearch(
+    String column,
+    String query, {
+
+    /// The text search configuration to use.
+    String? config,
+
+    /// The type of tsquery conversion to use on [query].
+    TextSearchType? type,
+  }) {
+    final typePart = switch (type) {
+      TextSearchType.plain => 'pl',
+      TextSearchType.phrase => 'ph',
+      TextSearchType.websearch => 'w',
+      null => '',
+    };
+    final configPart = config == null ? '' : '($config)';
+    return copyWithUrl(
+      appendSearchParams(column, '${typePart}fts$configPart.$query'),
+    );
+  }
+
+  /// Finds all rows whose [column] satisfies the filter.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .filter('username', 'eq', 'supabot');
+  /// ```
+  PostgrestFilterBuilder<T> filter(
+    String column,
+    String operator,
+    Object? value,
+  ) {
+    final Uri url;
+    if (value is List) {
+      if (operator == "in") {
+        url = appendSearchParams(
+          column,
+          '$operator.(${_cleanFilterArray(value)})',
+        );
+      } else {
+        url = appendSearchParams(
+          column,
+          '$operator.{${_cleanFilterArray(value)}}',
+        );
+      }
+    } else {
+      url = appendSearchParams(column, '$operator.$value');
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose columns match the specified [query] object.
+  ///
+  /// [query] contains column names as keys mapped to their filter values.
+  /// ```dart
+  /// await stitchdb.from('users').select().match({
+  ///   'username': 'supabot',
+  ///   'status': 'ONLINE',
+  /// });
+  /// ```
+  PostgrestFilterBuilder<T> match(Map<String, Object> query) {
+    var url = _url;
+    for (final entry in query.entries) {
+      url = appendSearchParams(entry.key, 'eq.${entry.value}', url);
+    }
+    return copyWithUrl(url);
+  }
+
+  /// Finds all rows whose value in the stated [column] matches the supplied [pattern] using PostgreSQL regular expression (case sensitive).
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .matchRegex('username', '^sup.*');
+  /// ```
+  PostgrestFilterBuilder<T> matchRegex(String column, String pattern) {
+    return copyWithUrl(appendSearchParams(column, 'match.$pattern'));
+  }
+
+  /// Finds all rows whose value in the stated [column] matches the supplied [pattern] using PostgreSQL regular expression (case insensitive).
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .imatchRegex('username', '^SUP.*');
+  /// ```
+  PostgrestFilterBuilder<T> imatchRegex(String column, String pattern) {
+    return copyWithUrl(appendSearchParams(column, 'imatch.$pattern'));
+  }
+
+  /// Finds all rows whose value on the stated [column] is not equal to the specified [value], treating `NULL` as a comparable value.
+  ///
+  /// This is different from [neq] which treats `NULL` specially.
+  ///
+  /// ```dart
+  /// await stitchdb
+  ///     .from('users')
+  ///     .select()
+  ///     .isDistinct('age', null);
+  /// ```
+  PostgrestFilterBuilder<T> isDistinct(String column, Object? value) {
+    return copyWithUrl(appendSearchParams(column, 'isdistinct.$value'));
+  }
+
+  @override
+  PostgrestFilterBuilder<T> retry({
+    bool enabled = true,
+    int? count,
+    Duration? requestTimeout,
+  }) {
+    return PostgrestFilterBuilder(
+      _copyWith(
+        retry: _retry.copyWith(enabled: enabled, count: count),
+        requestTimeout: requestTimeout,
+      ),
+    );
+  }
+
+  @override
+  PostgrestFilterBuilder<T> setHeader(String key, String value) {
+    return PostgrestFilterBuilder(
+      _copyWith(headers: {..._headers, key: value}),
+    );
+  }
+}

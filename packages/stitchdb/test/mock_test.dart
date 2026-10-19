@@ -1,0 +1,872 @@
+// ignore_for_file: deprecated_member_use_from_same_package
+
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:stitchdb/stitchdb.dart';
+import 'package:test/test.dart';
+
+void main() {
+  late StitchClient stitch;
+  late StitchClient customHeadersClient;
+  late HttpServer mockServer;
+  late String apiKey;
+  final Set<String> listeners = {};
+  const customApiKey = 'customApiKey';
+  const customHeaders = {'customfield': 'customvalue', 'apikey': customApiKey};
+  WebSocket? webSocket;
+  bool hasListener = false;
+  StreamSubscription<dynamic>? listener;
+
+  /// `testFilter` is used to test incoming realtime filter. The value should match the realtime filter set by the library.
+  Future<void> handleRequests(
+    HttpServer server, {
+    String? expectedFilter,
+    bool? expectedPrivate,
+  }) async {
+    await for (final HttpRequest request in server) {
+      final headers = request.headers;
+      if (headers.value('X-Client-Info') != 'stitchdb-flutter/0.0.0') {
+        throw 'Proper header not set';
+      }
+      final url = request.uri.toString();
+      if (url.startsWith("/rest")) {
+        final foundApiKey = headers.value('apikey');
+        expect(foundApiKey, apiKey);
+        if (foundApiKey == customApiKey) {
+          expect(headers.value('customfield'), 'customvalue');
+        }
+
+        // Check that rest api contains the correct filter in the URL
+        if (expectedFilter != null) {
+          expect(url, contains(expectedFilter));
+        }
+      }
+      if (url == '/rest/v1/todos?select=task%2Cstatus') {
+        final jsonString = jsonEncode([
+          {'task': 'task 1', 'status': true},
+          {'task': 'task 2', 'status': false},
+        ]);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonString);
+        await request.response.close();
+      } else if (url == '/rest/v1/todos?select=%2A' ||
+          url == '/rest/v1/rpc/todos?select=%2A') {
+        final jsonString = jsonEncode([
+          {'id': 1, 'task': 'task 1', 'status': true},
+          {'id': 2, 'task': 'task 2', 'status': false},
+        ]);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonString);
+        await request.response.close();
+      } else if (url == '/rest/v1/todos?select=%2A&status=eq.true') {
+        final jsonString = jsonEncode([
+          {'id': 1, 'task': 'task 1', 'status': true},
+        ]);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonString);
+        await request.response.close();
+      } else if (url == '/rest/v1/todos?select=%2A&order=id.desc.nullslast') {
+        final jsonString = jsonEncode([
+          {'id': 2, 'task': 'task 2', 'status': false},
+          {'id': 1, 'task': 'task 1', 'status': true},
+        ]);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonString);
+        await request.response.close();
+      } else if (url ==
+          '/rest/v1/todos?select=%2A&order=id.desc.nullslast&limit=2') {
+        final jsonString = jsonEncode([
+          {'id': 2, 'task': 'task 2', 'status': false},
+          {'id': 1, 'task': 'task 1', 'status': true},
+        ]);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write(jsonString);
+        await request.response.close();
+      } else if (url.contains('rest')) {
+        // Just return an empty string as dummy data if any other rest request
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json
+          ..write('[]');
+        await request.response.close();
+      } else if (url.contains('realtime')) {
+        webSocket = await WebSocketTransformer.upgrade(request);
+        if (hasListener) {
+          return;
+        }
+        hasListener = true;
+        listener = webSocket!.listen((message) {
+          unawaited(() async {
+            /// Protocol 2.0.0 text frames are positional arrays:
+            /// [join_ref, ref, topic, event, payload].
+            ///
+            /// `filter` might be there or not depending on whether is a filter set
+            /// to the realtime subscription, so include the filter if the request
+            /// includes a filter.
+            final requestJson = jsonDecode(message as String) as List;
+            final ref = requestJson[1];
+            final topic = requestJson[2];
+            final event = requestJson[3];
+            final requestPayload = requestJson[4] as Map;
+
+            if (event == 'phx_leave') {
+              listeners.remove(topic);
+              return;
+            }
+            if (listeners.contains(topic)) {
+              return;
+            }
+            listeners.add(topic);
+
+            final String? realtimeFilter =
+                requestPayload['config']['postgres_changes'].first['filter'];
+            final bool isPrivate = requestPayload['config']['private'] as bool;
+
+            if (expectedFilter != null) {
+              expect(realtimeFilter, expectedFilter);
+            }
+            if (expectedPrivate != null) {
+              expect(isPrivate, expectedPrivate);
+            }
+
+            final replyString = jsonEncode([
+              null,
+              ref,
+              topic,
+              'phx_reply',
+              {
+                'response': {
+                  'postgres_changes': [
+                    {
+                      'id': 77086988,
+                      'event': '*',
+                      'schema': 'public',
+                      'table': 'todos',
+                      'filter': ?realtimeFilter,
+                    },
+                  ],
+                },
+                'status': 'ok',
+              },
+            ]);
+            webSocket!.add(replyString);
+
+            // Send an insert event
+            await Future.delayed(Duration(milliseconds: 10));
+            final insertString = jsonEncode([
+              null,
+              null,
+              topic,
+              'postgres_changes',
+              {
+                'ids': [77086988],
+                'data': {
+                  'commit_timestamp': '2021-08-01T08:00:20Z',
+                  'record': {'id': 3, 'task': 'task 3', 'status': 't'},
+                  'schema': 'public',
+                  'table': 'todos',
+                  'type': 'INSERT',
+                  'filter': ?realtimeFilter,
+                  'columns': [
+                    {
+                      'name': 'id',
+                      'type': 'int4',
+                      'type_modifier': 4294967295,
+                    },
+                    {
+                      'name': 'task',
+                      'type': 'text',
+                      'type_modifier': 4294967295,
+                    },
+                    {
+                      'name': 'status',
+                      'type': 'bool',
+                      'type_modifier': 4294967295,
+                    },
+                  ],
+                },
+              },
+            ]);
+            webSocket!.add(insertString);
+
+            // Send an update event for id = 2
+            await Future.delayed(Duration(milliseconds: 10));
+            final updateString = jsonEncode([
+              null,
+              null,
+              topic,
+              'postgres_changes',
+              {
+                'ids': [77086988],
+                'data': {
+                  'columns': [
+                    {'name': 'id', 'type': 'int4', 'type_modifier': 4294967295},
+                    {
+                      'name': 'task',
+                      'type': 'text',
+                      'type_modifier': 4294967295,
+                    },
+                    {
+                      'name': 'status',
+                      'type': 'bool',
+                      'type_modifier': 4294967295,
+                    },
+                  ],
+                  'commit_timestamp': '2021-08-01T08:00:30Z',
+                  'errors': null,
+                  'old_record': {'id': 2},
+                  'record': {'id': 2, 'task': 'task 2 updated', 'status': 'f'},
+                  'schema': 'public',
+                  'table': 'todos',
+                  'type': 'UPDATE',
+                  'filter': ?realtimeFilter,
+                },
+              },
+            ]);
+            webSocket!.add(updateString);
+
+            // Send delete event for id=2
+            await Future.delayed(Duration(milliseconds: 10));
+            final deleteString = jsonEncode([
+              null,
+              null,
+              topic,
+              'postgres_changes',
+              {
+                'data': {
+                  'columns': [
+                    {'name': 'id', 'type': 'int4', 'type_modifier': 4294967295},
+                    {
+                      'name': 'task',
+                      'type': 'text',
+                      'type_modifier': 4294967295,
+                    },
+                    {
+                      'name': 'status',
+                      'type': 'bool',
+                      'type_modifier': 4294967295,
+                    },
+                  ],
+                  'commit_timestamp': '2022-09-14T02:12:52Z',
+                  'errors': null,
+                  'old_record': {'id': 2},
+                  'schema': 'public',
+                  'table': 'todos',
+                  'type': 'DELETE',
+                  'filter': ?realtimeFilter,
+                },
+                'ids': [77086988],
+              },
+            ]);
+            webSocket!.add(deleteString);
+
+            /// Send an update event for id = 4
+            /// Record with id = 4 did not exist in the initial data fetch,
+            /// so the SDK should insert the record in the in memory cache
+            await Future.delayed(Duration(milliseconds: 10));
+            final updateId4 = jsonEncode([
+              null,
+              null,
+              topic,
+              'postgres_changes',
+              {
+                'ids': [77086988],
+                'data': {
+                  'columns': [
+                    {'name': 'id', 'type': 'int4', 'type_modifier': 4294967295},
+                    {
+                      'name': 'task',
+                      'type': 'text',
+                      'type_modifier': 4294967295,
+                    },
+                    {
+                      'name': 'status',
+                      'type': 'bool',
+                      'type_modifier': 4294967295,
+                    },
+                  ],
+                  'commit_timestamp': '2021-08-01T08:00:30Z',
+                  'errors': null,
+                  'old_record': {'id': 4},
+                  'record': {'id': 4, 'task': 'task 4', 'status': 't'},
+                  'schema': 'public',
+                  'table': 'todos',
+                  'type': 'UPDATE',
+                  'filter': ?realtimeFilter,
+                },
+              },
+            ]);
+            webSocket!.add(updateId4);
+
+            // Send delete event for id=5
+            /// Should be ignored by the SDK
+            await Future.delayed(Duration(milliseconds: 10));
+            final ignoredDeleteString = jsonEncode([
+              null,
+              null,
+              topic,
+              'postgres_changes',
+              {
+                'data': {
+                  'columns': [
+                    {'name': 'id', 'type': 'int4', 'type_modifier': 4294967295},
+                    {
+                      'name': 'task',
+                      'type': 'text',
+                      'type_modifier': 4294967295,
+                    },
+                    {
+                      'name': 'status',
+                      'type': 'bool',
+                      'type_modifier': 4294967295,
+                    },
+                  ],
+                  'commit_timestamp': '2022-09-14T02:12:52Z',
+                  'errors': null,
+                  'old_record': {'id': 5},
+                  'schema': 'public',
+                  'table': 'todos',
+                  'type': 'DELETE',
+                  'filter': ?realtimeFilter,
+                },
+                'ids': [77086988],
+              },
+            ]);
+            webSocket!.add(ignoredDeleteString);
+          }());
+        });
+      } else {
+        request.response.statusCode = HttpStatus.ok;
+        await request.response.close();
+      }
+    }
+  }
+
+  setUp(() async {
+    apiKey = 'stitchKey';
+    mockServer = await HttpServer.bind('localhost', 0);
+    stitch = StitchClient(
+      'http://${mockServer.address.host}:${mockServer.port}',
+      apiKey,
+      headers: {
+        'X-Client-Info': 'stitchdb-flutter/0.0.0',
+      },
+    );
+    customHeadersClient = StitchClient(
+      'http://${mockServer.address.host}:${mockServer.port}',
+      apiKey,
+      headers: {'X-Client-Info': 'stitchdb-flutter/0.0.0', ...customHeaders},
+    );
+    hasListener = false;
+  });
+
+  tearDown(() async {
+    await stitch.dispose();
+    await customHeadersClient.dispose();
+
+    //Manually disconnect the socket channel to avoid automatic retrying to reconnect. This caused failing in later executed tests.
+    await stitch.removeAllChannels();
+    await customHeadersClient.removeAllChannels();
+
+    // Wait for the realtime updates to come through
+    await Future.delayed(Duration(milliseconds: 100));
+
+    listeners.clear();
+
+    await webSocket?.close();
+
+    await listener?.cancel();
+
+    await mockServer.close();
+  });
+
+  group('basic test', () {
+    setUp(() async {
+      unawaited(handleRequests(mockServer));
+    });
+
+    test('test mock server', () async {
+      final data = await stitch.from('todos').select('task, status');
+      expect(data, hasLength(2));
+    });
+
+    group('Basic client test', () {
+      test('Postgrest calls the correct endpoint', () async {
+        final data = await stitch.from('todos').select();
+        expect(data, [
+          {'id': 1, 'task': 'task 1', 'status': true},
+          {'id': 2, 'task': 'task 2', 'status': false},
+        ]);
+      });
+
+      test(
+        'Postgrest calls the correct endpoint with custom headers',
+        () async {
+          apiKey = customApiKey;
+          final data = await customHeadersClient.from('todos').select();
+          expect(data, [
+            {'id': 1, 'task': 'task 1', 'status': true},
+            {'id': 2, 'task': 'task 2', 'status': false},
+          ]);
+        },
+      );
+    });
+
+    group('stream()', () {
+      test("listen, cancel and listen again", () async {
+        final stream = stitch.from('todos').stream(primaryKey: ['id']);
+        final subscription = stream.listen(expectAsync1((event) {}, count: 5));
+        await Future.delayed(Duration(seconds: 1));
+
+        await subscription.cancel();
+        await Future.delayed(Duration(seconds: 1));
+
+        stream.listen(expectAsync1((event) {}, count: 5));
+      });
+
+      test("can listen twice at the same time", () async {
+        final stream = stitch.from('todos').stream(primaryKey: ['id']);
+        stream.listen(expectAsync1((event) {}, count: 5));
+        stream.listen(expectAsync1((event) {}, count: 5));
+
+        // All realtime events are done emitting, so should receive the current data
+      });
+
+      test("Create two stream to same table", () async {
+        final stream1 = stitch.from('todos').stream(primaryKey: ['id']);
+        final stream2 = stitch.from('todos').stream(primaryKey: ['id']);
+        stream1.listen(expectAsync1((event) {}, count: 5));
+
+        stream2.listen(expectAsync1((event) {}, count: 5));
+      });
+
+      test("stream should emit the last emitted data when listened to", () async {
+        final stream = stitch.from('todos').stream(primaryKey: ['id']);
+        stream.listen(expectAsync1((event) {}, count: 5));
+
+        await Future.delayed(Duration(seconds: 3));
+
+        // All realtime events are done emitting, so should receive the current data
+        stream.listen(expectAsync1((event) {}, count: 1));
+      });
+      test('emits data', () {
+        final stream = stitch.from('todos').stream(primaryKey: ['id']);
+        expect(
+          stream,
+          emitsInOrder([
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 2, 'task': 'task 2', 'status': false},
+            ]),
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 2, 'task': 'task 2', 'status': false},
+              {'id': 3, 'task': 'task 3', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 2, 'task': 'task 2 updated', 'status': false},
+              {'id': 3, 'task': 'task 3', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 3, 'task': 'task 3', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 4, 'task': 'task 4', 'status': true},
+            ]),
+          ]),
+        );
+      });
+
+      test('emits data with asyncMap', () {
+        final stream = stitch
+            .from('todos')
+            .stream(primaryKey: ['id'])
+            .asyncMap((event) => Future.value([event]));
+        expect(
+          stream,
+          emitsInOrder([
+            containsAllInOrder([
+              [
+                {'id': 1, 'task': 'task 1', 'status': true},
+                {'id': 2, 'task': 'task 2', 'status': false},
+              ],
+            ]),
+            containsAllInOrder([
+              [
+                {'id': 1, 'task': 'task 1', 'status': true},
+                {'id': 2, 'task': 'task 2', 'status': false},
+                {'id': 3, 'task': 'task 3', 'status': true},
+              ],
+            ]),
+            containsAllInOrder([
+              [
+                {'id': 1, 'task': 'task 1', 'status': true},
+                {'id': 2, 'task': 'task 2 updated', 'status': false},
+                {'id': 3, 'task': 'task 3', 'status': true},
+              ],
+            ]),
+            containsAllInOrder([
+              [
+                {'id': 1, 'task': 'task 1', 'status': true},
+                {'id': 3, 'task': 'task 3', 'status': true},
+              ],
+            ]),
+          ]),
+        );
+      });
+
+      test("can listen twice at the same time with asyncMap", () async {
+        final stream = stitch
+            .from('todos')
+            .stream(primaryKey: ['id'])
+            .asyncMap((event) => event);
+        stream.listen(expectAsync1((event) {}, count: 5));
+
+        await Future.delayed(Duration(seconds: 3));
+
+        // All realtime events are done emitting, so should receive the current data
+        stream.listen(expectAsync1((event) {}, count: 1));
+      });
+
+      test('emits data with custom headers', () {
+        apiKey = customApiKey;
+        final stream = customHeadersClient
+            .from('todos')
+            .stream(primaryKey: ['id']);
+        expect(
+          stream,
+          emitsInOrder([
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 2, 'task': 'task 2', 'status': false},
+            ]),
+            containsAllInOrder([
+              {'id': 1, 'task': 'task 1', 'status': true},
+              {'id': 2, 'task': 'task 2', 'status': false},
+              {'id': 3, 'task': 'task 3', 'status': true},
+            ]),
+          ]),
+        );
+      });
+
+      test('with order', () {
+        final stream = stitch
+            .from('todos')
+            .stream(primaryKey: ['id'])
+            .order('id');
+        expect(
+          stream,
+          emitsInOrder([
+            containsAllInOrder([
+              {'id': 2, 'task': 'task 2', 'status': false},
+              {'id': 1, 'task': 'task 1', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 2, 'task': 'task 2', 'status': false},
+              {'id': 1, 'task': 'task 1', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 2, 'task': 'task 2 updated', 'status': false},
+              {'id': 1, 'task': 'task 1', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 1, 'task': 'task 1', 'status': true},
+            ]),
+          ]),
+        );
+      });
+
+      test('with limit', () {
+        final stream = stitch
+            .from('todos')
+            .stream(primaryKey: ['id'])
+            .order('id')
+            .limit(2);
+        expect(
+          stream,
+          emitsInOrder([
+            containsAllInOrder([
+              {'id': 2, 'task': 'task 2', 'status': false},
+              {'id': 1, 'task': 'task 1', 'status': true},
+            ]),
+            containsAllInOrder([
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 2, 'task': 'task 2', 'status': false},
+            ]),
+            containsAllInOrder([
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 2, 'task': 'task 2 updated', 'status': false},
+            ]),
+            containsAllInOrder([
+              {'id': 3, 'task': 'task 3', 'status': true},
+              {'id': 1, 'task': 'task 1', 'status': true},
+            ]),
+          ]),
+        );
+      });
+    });
+
+    group("rpc", () {
+      test("rpc", () async {
+        final data = await stitch.rpc("todos").select();
+        expect(data, [
+          {'id': 1, 'task': 'task 1', 'status': true},
+          {'id': 2, 'task': 'task 2', 'status': false},
+        ]);
+      });
+
+      test("rpc with custom headers", () async {
+        apiKey = customApiKey;
+        final data = await customHeadersClient.rpc("todos").select();
+        expect(data, [
+          {'id': 1, 'task': 'task 1', 'status': true},
+          {'id': 2, 'task': 'task 2', 'status': false},
+        ]);
+      });
+    });
+
+    group('realtime', () {
+      /// Constructing StitchDB query within a realtime callback caused exception
+      /// https://stitchdb.com/docs/sdk/flutter
+      test('Calling Postgrest within realtime callback', () async {
+        stitch
+            .channel('todos')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'todos',
+              callback: (payload) {
+                unawaited(stitch.from('todos'));
+              },
+            )
+            .subscribe();
+
+        await Future.delayed(const Duration(milliseconds: 700));
+
+        await stitch.removeAllChannels();
+      });
+    });
+  });
+
+  group('realtime filter', () {
+    test('can filter stream results with eq', () {
+      unawaited(handleRequests(mockServer, expectedFilter: 'status=eq.true'));
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'])
+          .eq('status', true);
+      expect(
+        stream,
+        emitsInOrder([
+          containsAllInOrder([
+            {'id': 1, 'task': 'task 1', 'status': true},
+          ]),
+          containsAllInOrder([
+            {'id': 1, 'task': 'task 1', 'status': true},
+            {'id': 3, 'task': 'task 3', 'status': true},
+          ]),
+        ]),
+      );
+    });
+
+    test('can filter stream results with neq', () {
+      unawaited(handleRequests(mockServer, expectedFilter: 'id=neq.2'));
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'])
+          .neq('id', 2);
+      expect(stream, emits(isList));
+    });
+
+    test('can filter stream results with gt', () {
+      unawaited(handleRequests(mockServer, expectedFilter: 'id=gt.2'));
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'])
+          .gt('id', 2);
+      expect(stream, emits(isList));
+    });
+
+    test('can filter stream results with gte', () {
+      unawaited(handleRequests(mockServer, expectedFilter: 'id=gte.2'));
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'])
+          .gte('id', 2);
+      expect(stream, emits(isList));
+    });
+
+    test('can filter stream results with lt', () {
+      unawaited(handleRequests(mockServer, expectedFilter: 'id=lt.2'));
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'])
+          .lt('id', 2);
+      expect(stream, emits(isList));
+    });
+
+    test('can filter stream results with lte', () {
+      unawaited(handleRequests(mockServer, expectedFilter: 'id=lte.2'));
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'])
+          .lte('id', 2);
+      expect(stream, emits(isList));
+    });
+  });
+
+  group('stream() channel config', () {
+    test('forwards channelConfig.private=true to realtime join payload', () {
+      unawaited(handleRequests(mockServer, expectedPrivate: true));
+
+      final stream = stitch
+          .from('todos')
+          .stream(primaryKey: ['id'], private: true);
+
+      expect(stream, emits(isList));
+    });
+
+    test('uses default private=false when channelConfig is omitted', () {
+      unawaited(handleRequests(mockServer, expectedPrivate: false));
+
+      final stream = stitch.from('todos').stream(primaryKey: ['id']);
+
+      expect(stream, emits(isList));
+    });
+  });
+
+  group('Deprecated execute method', () {
+    test('should work with deprecated execute method', () {
+      unawaited(handleRequests(mockServer));
+      final streamBuilder = stitch.from('todos').stream(primaryKey: ['id']);
+      final stream = streamBuilder.execute();
+      expect(stream, emits(isList));
+    });
+  });
+
+  group('Error Handling', () {
+    group('RealtimeSubscribeException', () {
+      test('should create exception with status only', () {
+        final exception = RealtimeSubscribeException(
+          RealtimeSubscribeStatus.timedOut,
+        );
+
+        expect(exception.status, RealtimeSubscribeStatus.timedOut);
+        expect(exception.details, isNull);
+        expect(exception.toString(), contains('timedOut'));
+      });
+
+      test('should create exception with status and details', () {
+        final exception = RealtimeSubscribeException(
+          RealtimeSubscribeStatus.channelError,
+          'Connection failed',
+        );
+
+        expect(exception.status, RealtimeSubscribeStatus.channelError);
+        expect(exception.details, 'Connection failed');
+        expect(exception.toString(), contains('channelError'));
+        expect(exception.toString(), contains('Connection failed'));
+      });
+    });
+
+    group('Stream Error Handling', () {
+      test('should handle postgrest errors gracefully', () async {
+        final errorServer = await HttpServer.bind('localhost', 0);
+
+        // Setup server to return error for rest requests
+        errorServer.listen((request) {
+          if (request.uri.path.contains('/rest/')) {
+            request.response
+              ..statusCode = HttpStatus.unauthorized
+              ..headers.contentType = ContentType.json
+              ..write('{"error": "Unauthorized"}');
+            unawaited(request.response.close());
+          } else {
+            request.response.statusCode = HttpStatus.ok;
+            unawaited(request.response.close());
+          }
+        });
+
+        final errorClient = StitchClient(
+          'http://${errorServer.address.host}:${errorServer.port}',
+          'test-key',
+          headers: {'X-Client-Info': 'stitchdb-flutter/0.0.0'},
+        );
+
+        final stream = errorClient.from('todos').stream(primaryKey: ['id']);
+
+        bool errorReceived = false;
+        final completer = Completer<void>();
+
+        final subscription = stream.listen(
+          (_) {},
+          onError: (error) {
+            errorReceived = true;
+            completer.complete();
+          },
+        );
+
+        await completer.future.timeout(Duration(seconds: 5));
+        expect(errorReceived, isTrue);
+
+        await subscription.cancel();
+        await errorClient.dispose();
+        await errorServer.close();
+      });
+
+      test('should handle access token retrieval errors', () async {
+        final clientWithFailingToken = StitchClient(
+          'http://${mockServer.address.host}:${mockServer.port}',
+          'test-key',
+          accessToken: () async {
+            throw Exception('Token retrieval failed');
+          },
+          headers: {'X-Client-Info': 'stitchdb-flutter/0.0.0'},
+        );
+
+        // Should handle token errors gracefully
+        await expectLater(
+          () => clientWithFailingToken.from('test').select(),
+          throwsA(isA<Exception>()),
+        );
+
+        await clientWithFailingToken.dispose();
+      });
+    });
+
+    group('Dispose Error Handling', () {
+      test('should handle dispose errors gracefully', () async {
+        final client = StitchClient(
+          'http://${mockServer.address.host}:${mockServer.port}',
+          'test-key',
+          headers: {'X-Client-Info': 'stitchdb-flutter/0.0.0'},
+        );
+
+        // First dispose should succeed
+        await client.dispose();
+
+        // Operations after dispose should not throw
+        expect(() => client.from('test'), returnsNormally);
+      });
+    });
+  });
+}

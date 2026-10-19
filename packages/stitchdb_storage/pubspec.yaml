@@ -1,0 +1,33 @@
+name: stitchdb_storage
+description: Dart client library to interact with StitchDB Storage. StitchDB Storage provides an interface for managing Files stored in S3, using Postgres to manage permissions.
+version: 1.0.0
+homepage: 'https://stitchdb.com/docs/sdk/flutter'
+repository: 'https://github.com/stitchdb/stitchdb-flutter'
+issue_tracker: 'https://github.com/stitchdb/stitchdb-flutter/issues'
+documentation: 'https://stitchdb.com/docs/sdk/flutter'
+topics:
+  - stitchdb
+  - storage
+  - s3
+  - files
+  - backend
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+
+resolution: workspace
+
+dependencies:
+  http: ^1.6.0
+  mime: '>=2.0.0 <3.0.0'
+  meta: ^1.16.0
+  logging: ^1.3.0
+  stitchdb_common: ^1.0.0
+
+dev_dependencies:
+  test: ^1.25.0
+  stitchdb_lints: ^1.0.0
+  path: ^1.9.0
+
+false_secrets:
+  - /test/**

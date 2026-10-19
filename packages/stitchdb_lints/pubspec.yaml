@@ -1,0 +1,19 @@
+name: stitchdb_lints
+description: Shared analyzer and DCM lint configuration for the StitchDB Flutter packages.
+version: 1.0.0
+homepage: 'https://stitchdb.com/docs/sdk/flutter'
+repository: "https://github.com/stitchdb/stitchdb-flutter"
+issue_tracker: 'https://github.com/stitchdb/stitchdb-flutter/issues'
+topics:
+  - lints
+  - analysis
+  - stitchdb
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+resolution: workspace
+
+dependencies:
+  lints: ^6.0.0
+  flutter_lints: ^6.0.0

@@ -1,0 +1,40 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dart:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [stitchdb, stitchdb_auth, stitchdb_common, stitchdb_functions, stitchdb_postgrest, stitchdb_realtime, stitchdb_storage]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart analyze packages/${{ matrix.package }}
+      # Integration tests need a running StitchDB stack (`stitchdb start`); unit tests run everywhere.
+      - run: dart test -x integration
+        working-directory: packages/${{ matrix.package }}
+
+  flutter:
+    name: stitchdb_flutter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze packages/stitchdb_flutter
+      - run: flutter test
+        working-directory: packages/stitchdb_flutter

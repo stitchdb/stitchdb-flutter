@@ -1,0 +1,4 @@
+analyzer:
+  exclude:
+    - build/**
+include: package:stitchdb_lints/analysis_options_flutter.yaml

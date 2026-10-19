@@ -1,0 +1,132 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stitchdb_flutter/stitchdb_flutter.dart';
+
+import 'widget_test_stubs.dart';
+
+class _MockLocalStorage extends MockLocalStorage {
+  bool _initializeCalled = false;
+
+  bool get initializeCalled => _initializeCalled;
+
+  @override
+  Future<void> initialize() {
+    _initializeCalled = true;
+    return super.initialize();
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const stitchUrl = '';
+  const stitchKey = '';
+
+  group('Authentication', () {
+    setUp(() async {
+      try {
+        await Stitch.instance.dispose();
+      } catch (_) {
+        // Ignore dispose errors
+      }
+
+      mockAppLink();
+    });
+
+    tearDown(() async {
+      try {
+        await Stitch.instance.dispose();
+      } catch (_) {
+        // Ignore dispose errors
+      }
+    });
+
+    group('Session management', () {
+      test('initializes local storage on initialize', () async {
+        final mockStorage = _MockLocalStorage();
+
+        await Stitch.initialize(
+          url: stitchUrl,
+          anonKey: stitchKey,
+          debug: false,
+          authOptions: FlutterAuthClientOptions(
+            localStorage: mockStorage,
+            pkceAsyncStorage: MockAsyncStorage(),
+          ),
+        );
+
+        // Give time for initialization to complete
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        expect(mockStorage.initializeCalled, isTrue);
+      });
+    });
+
+    group('Auth state stream error handling', () {
+      test(
+        'does not propagate auth state stream errors as unhandled exceptions',
+        () async {
+          await Stitch.initialize(
+            url: stitchUrl,
+            anonKey: stitchKey,
+            debug: false,
+            authOptions: FlutterAuthClientOptions(
+              localStorage: const MockEmptyLocalStorage(),
+              pkceAsyncStorage: MockAsyncStorage(),
+            ),
+          );
+
+          // Trigger an error on the auth state change stream via notifyException.
+          // This should not throw or cause an unhandled zone error.
+          final auth = Stitch.instance.client.auth;
+          // ignore: invalid_use_of_internal_member
+          auth.notifyException(
+            Exception('test auth error'),
+            StackTrace.current,
+          );
+
+          // Allow the stream listener to process the error.
+          await Future.delayed(Duration.zero);
+
+          // If we reach here the error was not rethrown as an unhandled exception.
+        },
+      );
+    });
+
+    group('Session recovery', () {
+      test('handles corrupted session data gracefully', () async {
+        const corruptedStorage = MockExpiredStorage();
+
+        await Stitch.initialize(
+          url: stitchUrl,
+          anonKey: stitchKey,
+          debug: false,
+          authOptions: FlutterAuthClientOptions(
+            localStorage: corruptedStorage,
+            pkceAsyncStorage: MockAsyncStorage(),
+          ),
+        );
+
+        // MockExpiredStorage returns an expired session, not null
+        expect(Stitch.instance.client.auth.currentSession, isNotNull);
+        expect(Stitch.instance.client.auth.currentSession?.isExpired, isTrue);
+      });
+
+      test('handles null session during initialization', () async {
+        const emptyStorage = MockEmptyLocalStorage();
+
+        await Stitch.initialize(
+          url: stitchUrl,
+          anonKey: stitchKey,
+          debug: false,
+          authOptions: FlutterAuthClientOptions(
+            localStorage: emptyStorage,
+            pkceAsyncStorage: MockAsyncStorage(),
+          ),
+        );
+
+        // Should handle empty storage gracefully
+        expect(Stitch.instance.client.auth.currentSession, isNull);
+      });
+    });
+  });
+}

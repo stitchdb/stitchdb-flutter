@@ -1,0 +1,90 @@
+# Publishes one package to pub.dev when its tag is pushed, e.g. `git tag stitchdb-v1.0.1 && git push --tags`.
+# Uses pub.dev automated publishing (GitHub OIDC): no token is stored in this repository.
+# One-time setup per package on pub.dev: Admin -> Automated publishing -> Enable publishing from GitHub Actions,
+# repository `stitchdb/stitchdb-flutter`, tag pattern `<package>-v{{version}}`.
+name: Publish to pub.dev
+
+on:
+  push:
+    tags:
+      - 'stitchdb_common-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb_auth-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb_postgrest-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb_realtime-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb_storage-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb_functions-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb-v[0-9]+.[0-9]+.[0-9]+*'
+      - 'stitchdb_flutter-v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  stitchdb_common:
+    if: startsWith(github.ref_name, 'stitchdb_common-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb_common
+
+  stitchdb_auth:
+    if: startsWith(github.ref_name, 'stitchdb_auth-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb_auth
+
+  stitchdb_postgrest:
+    if: startsWith(github.ref_name, 'stitchdb_postgrest-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb_postgrest
+
+  stitchdb_realtime:
+    if: startsWith(github.ref_name, 'stitchdb_realtime-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb_realtime
+
+  stitchdb_storage:
+    if: startsWith(github.ref_name, 'stitchdb_storage-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb_storage
+
+  stitchdb_functions:
+    if: startsWith(github.ref_name, 'stitchdb_functions-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb_functions
+
+  stitchdb:
+    if: startsWith(github.ref_name, 'stitchdb-v')
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      working-directory: packages/stitchdb
+
+  stitchdb_flutter:
+    if: startsWith(github.ref_name, 'stitchdb_flutter-v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      # exchanges the GitHub OIDC token for a pub.dev publishing token
+      - uses: dart-lang/setup-dart@v1
+      - run: flutter pub get
+      - run: flutter pub publish --force
+        working-directory: packages/stitchdb_flutter
