@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:stitchdb/stitchdb.dart';
 
 /// Run with:
-///   STITCHDB_URL=https://<project-ref>.stitchdb.com STITCHDB_ANON_KEY=<anon-key> dart run example/main.dart
+///   STITCHDB_URL=https://<project-ref>.p.stitchdb.com STITCHDB_ANON_KEY=<anon-key> dart run example/main.dart
 Future<void> main() async {
   final client = StitchClient(
     Platform.environment['STITCHDB_URL']!,

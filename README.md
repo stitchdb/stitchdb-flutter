@@ -10,15 +10,28 @@ Official Dart and Flutter clients for [StitchDB](https://stitchdb.com): Postgres
 
 ## Flutter
 
-```bash
-flutter pub add stitchdb_flutter
+Add it from this repository in `pubspec.yaml` (the overrides point its own packages here too):
+
+```yaml
+dependencies:
+  stitchdb_flutter:
+    git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_flutter }
+
+dependency_overrides:
+  stitchdb:           { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb } }
+  stitchdb_auth:      { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_auth } }
+  stitchdb_common:    { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_common } }
+  stitchdb_functions: { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_functions } }
+  stitchdb_postgrest: { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_postgrest } }
+  stitchdb_realtime:  { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_realtime } }
+  stitchdb_storage:   { git: { url: https://github.com/stitchdb/stitchdb-flutter, path: packages/stitchdb_storage } }
 ```
 
 ```dart
 import 'package:stitchdb_flutter/stitchdb_flutter.dart';
 
 Future<void> main() async {
-  await Stitch.initialize(url: 'https://<project-ref>.stitchdb.com', anonKey: '<anon-key>');
+  await Stitch.initialize(url: 'https://<project-ref>.p.stitchdb.com', anonKey: '<anon-key>');
   runApp(const MyApp());
 }
 
@@ -30,14 +43,12 @@ await stitchdb.auth.signInWithPassword(email: 'ada@example.com', password: 'a-st
 
 ## Dart
 
-```bash
-dart pub add stitchdb
-```
+Same as above with `stitchdb` (path `packages/stitchdb`) under `dependencies`, and the overrides without `stitchdb`.
 
 ```dart
 import 'package:stitchdb/stitchdb.dart';
 
-final client = StitchClient('https://<project-ref>.stitchdb.com', '<anon-key>');
+final client = StitchClient('https://<project-ref>.p.stitchdb.com', '<anon-key>');
 ```
 
 Find the project URL and anon key in the dashboard under **Settings → API keys**.
