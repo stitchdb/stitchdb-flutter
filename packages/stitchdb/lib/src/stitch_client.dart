@@ -53,6 +53,7 @@ class StitchClient {
   final String _authUrl;
   final String _storageUrl;
   final String _functionsUrl;
+  final String _syncUrl;
   final Map<String, String> _headers;
   final Client? _httpClient;
   late final Client _authHttpClient;
@@ -143,6 +144,7 @@ class StitchClient {
        _authUrl = '$stitchUrl/auth/v1',
        _storageUrl = '$stitchUrl/storage/v1',
        _functionsUrl = '$stitchUrl/functions/v1',
+       _syncUrl = '$stitchUrl/sync/v1',
        _postgrestOptions = postgrestOptions,
        _headers = {
          ...Constants.defaultHeaders,
@@ -270,6 +272,41 @@ class StitchClient {
   ///  Unsubscribes and removes all Realtime channels from Realtime client.
   Future<List<String>> removeAllChannels() {
     return realtime.removeAllChannels();
+  }
+
+  /// Offline-first sync: a local copy of the rows the signed-in user may see
+  /// in the tables that sync (Studio › Database › Offline sync). Reads come
+  /// from the local copy, writes apply locally at once and are queued; the
+  /// queue is pushed and changes are pulled whenever the device is online.
+  ///
+  /// [tables] limits the copy to these tables (default: every table that
+  /// syncs). [store] keeps the copy (default: in memory; use a persistent
+  /// store such as `SharedPreferencesOfflineStore` in apps, one per signed-in
+  /// user). [interval] is how often to sync while online
+  /// ([Duration.zero] = only when you call `sync()`). [batch] is the number of
+  /// rows per pull request.
+  ///
+  /// ```dart
+  /// final offline = stitchdb.offline(tables: ['todos']);
+  /// await offline.ready;
+  /// await offline.table('todos').upsert({'id': uuid, 'title': 'Milk'});
+  /// offline.table('todos').stream().listen(render);
+  /// ```
+  OfflineClient offline({
+    List<String>? tables,
+    OfflineStore? store,
+    Duration interval = const Duration(seconds: 30),
+    int batch = 500,
+  }) {
+    return OfflineClient(
+      _syncUrl,
+      _authHttpClient,
+      () => headers,
+      tables: tables,
+      store: store,
+      interval: interval,
+      batch: batch,
+    );
   }
 
   /// Get either the custom access token from [accessToken] or the stitchdb one

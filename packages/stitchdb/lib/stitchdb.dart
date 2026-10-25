@@ -10,6 +10,7 @@ export 'package:stitchdb_realtime/stitchdb_realtime.dart';
 export 'package:stitchdb_storage/stitchdb_storage.dart';
 
 export 'src/auth_user.dart';
+export 'src/offline.dart';
 export 'src/realtime_client_options.dart';
 export 'src/remove_subscription_result.dart';
 export 'src/stitch_client.dart';
