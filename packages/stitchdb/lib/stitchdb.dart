@@ -13,6 +13,7 @@ export 'src/analytics.dart' hide analyticsCountry, analyticsOs;
 export 'src/auth_user.dart';
 export 'src/crash_store.dart' show FileAnalyticsStore, FileCrashStore;
 export 'src/crashes.dart' hide crashUuid;
+export 'src/links.dart';
 export 'src/offline.dart';
 export 'src/realtime_client_options.dart';
 export 'src/remove_subscription_result.dart';

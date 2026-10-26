@@ -154,6 +154,11 @@ class AnalyticsClient {
 
   AnalyticsStore get _st => _store ?? _defaultStore;
 
+  /// The store in use: the one passed to [start], else the default one.
+  /// Also keeps whether the deferred deep link was checked (`client.links`).
+  @internal
+  AnalyticsStore get store => _st;
+
   /// Whether [start] was called (and not [stop]).
   bool get isStarted => _started;
 

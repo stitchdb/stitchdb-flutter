@@ -85,6 +85,26 @@ await stitchdb.analytics.optOut(); // the user does not want to be tracked
 - Consent: `optOut()` deletes the signed-in user's events on the server and stops tracking; it is remembered in the store (`isOptedOut`). `optIn()` tracks again. `anonymousId` is the id of this device before sign-in.
 - If analytics is off for the project, the queue is cleared and nothing more is sent until the next `start()`.
 
+## Deep links
+
+`links` works with the short links of Studio › Links (`https://<project host or your domain>/l/<code>`): they open your app on the right screen when it is installed and otherwise send people to the App Store, Google Play or a web page.
+
+```dart
+// the app was opened with a link
+final link = await stitchdb.links.resolve(url, platform: 'ios');
+if (link != null) navigate(link.path ?? '/', link.data);
+
+// first launch after an install: the link that led to it, or null
+final first = await stitchdb.links.deferred(platform: 'android', referrer: installReferrer);
+
+// make a link (signed-in users when the project allows it, any link with the service key)
+final made = await stitchdb.links.create(const LinkInput(path: '/invite/7', data: {'from': 'ana'}));
+```
+
+- `resolve(urlOrCode)` returns the link's `path` and `data` (counted as an open) and `null`, without a request, for a URL that is not a short link (`LinksClient.codeFrom` gives the code). An expired or turned-off link throws a `LinksException` with status 410, an unknown one 404.
+- `deferred()` is asked once per install: after an answer the flag is kept in the analytics store (the `store` passed to `analytics.start`, else in memory) and later calls return `null` without a request; `force: true` asks again. Android apps pass the Play install referrer string as `referrer` for an exact match; otherwise the click is matched by network and platform within 2 hours (best effort). `platform` defaults to the OS the app runs on when it is iOS or Android.
+- With the service key: `list(search:, limit:, offset:)`, `get(code, days:)` (clicks, opens and installs per day, platform, country, outcome and referrer), `update(code, LinkInput(...))` (`clear: {'title'}` sets a field to null) and `remove(code)`.
+
 ## Docs
 
 The docs can be found on the official StitchDB website.

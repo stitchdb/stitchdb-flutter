@@ -529,6 +529,27 @@ await stitchdb.analytics.optOut();
 
 For a `StitchClient` you create yourself, call `configureFlutterAnalytics(client)` before `client.analytics.start()`.
 
+### <a id="short-links"></a>Deep links with short links
+
+Short links from Studio › Links (`https://<project host or your domain>/l/<code>`) open your app on the right screen when it is installed (iOS Universal Links, Android App Links) and otherwise send people to the App Store, Google Play or a web page. Receive the incoming link with the deep link package you already use (for example `app_links`) and pass its `Uri` to `resolve`:
+
+```dart
+final stitchdb = Stitch.instance.client;
+
+// the app was opened with a link (for example AppLinks().uriLinkStream)
+final link = await stitchdb.links.resolve(uri.toString());
+if (link != null) router.go(link.path ?? '/', extra: link.data);
+
+// first launch after an install: the link that led to it, or null
+final first = await stitchdb.links.deferred(referrer: installReferrer); // referrer: Android only
+
+// make a link to share (signed-in users when the project allows it in Studio › Links)
+final made = await stitchdb.links.create(const LinkInput(path: '/invite/7', data: {'from': 'ana'}));
+```
+
+- `resolve` returns `null` without a request for a URL that is not a short link; an expired or turned-off link throws a `LinksException` with status 410. The platform defaults to the device OS (iOS or Android).
+- `deferred()` is asked once per install: the flag is kept in SharedPreferences and later calls return `null` without a request (`force: true` asks again). On Android pass the Play install referrer (`ReferrerDetails.installReferrer`, read with the Play Install Referrer API in your app) as `referrer` for an exact match; otherwise the click is matched by network and platform within 2 hours, best effort.
+
 ## <a id="deep-links"></a>Deep links
 
 ### Why do you need to setup deep links

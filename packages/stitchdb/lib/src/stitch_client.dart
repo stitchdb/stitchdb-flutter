@@ -57,6 +57,7 @@ class StitchClient {
   final String _syncUrl;
   final String _crashesUrl;
   final String _analyticsUrl;
+  final String _linksUrl;
   final Map<String, String> _headers;
   final Client? _httpClient;
   late final Client _authHttpClient;
@@ -92,6 +93,15 @@ class StitchClient {
   /// stitchdb.analytics.track('purchase', {'plan': 'pro'});
   /// ```
   late final AnalyticsClient analytics;
+
+  /// Deep links and short links (Studio › Links): resolve the link the app
+  /// was opened with, the link that led to an install, and make links.
+  ///
+  /// ```dart
+  /// final link = await stitchdb.links.resolve(uri.toString());
+  /// if (link != null) router.go(link.path ?? '/');
+  /// ```
+  late final LinksClient links;
   StreamSubscription<AuthState>? _authStateSubscription;
   final YAJsonIsolate _isolate;
   final bool _hasCustomIsolate;
@@ -170,6 +180,7 @@ class StitchClient {
        _syncUrl = '$stitchUrl/sync/v1',
        _crashesUrl = '$stitchUrl/crashes/v1',
        _analyticsUrl = '$stitchUrl/analytics/v1',
+       _linksUrl = '$stitchUrl/links/v1',
        _postgrestOptions = postgrestOptions,
        _headers = {
          ...Constants.defaultHeaders,
@@ -225,6 +236,12 @@ class StitchClient {
       _authHttpClient,
       () => this.headers,
       accessToken == null ? _onUserChange : null,
+    );
+    links = LinksClient(
+      _linksUrl,
+      _authHttpClient,
+      () => this.headers,
+      () => analytics.store,
     );
     if (accessToken == null) {
       _log.config(
