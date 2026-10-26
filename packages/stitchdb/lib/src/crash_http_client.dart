@@ -7,7 +7,8 @@ import 'crashes.dart';
 
 /// Records every request the client makes as an `api` breadcrumb while crash
 /// reporting is started: method, path, query keys (no values), status, the
-/// error code of a failed call and the duration. No bodies, no hosts.
+/// error code of a failed call and the duration. No bodies, no hosts. Calls
+/// of crash reporting and analytics themselves are not recorded.
 @internal
 class CrashRecordingClient extends BaseClient {
   final Client _inner;
@@ -21,7 +22,9 @@ class CrashRecordingClient extends BaseClient {
   Future<StreamedResponse> send(BaseRequest request) async {
     final record = sink;
     final url = crashUrl(request.url);
-    if (record == null || url.contains('/crashes/v1/')) {
+    if (record == null ||
+        url.contains('/crashes/v1/') ||
+        url.contains('/analytics/v1/')) {
       return _inner.send(request);
     }
     final t0 = DateTime.now();

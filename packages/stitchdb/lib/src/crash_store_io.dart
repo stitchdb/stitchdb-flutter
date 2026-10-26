@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'analytics.dart';
 import 'crashes.dart';
 
 /// A [CrashStore] that keeps queued reports, the install id and the last
@@ -68,4 +69,17 @@ String? crashLocale() {
   } catch (_) {
     return null;
   }
+}
+
+/// An [AnalyticsStore] that keeps waiting analytics events, the anonymous id
+/// and the opt-out as files in [directory], so they survive the process.
+///
+/// ```dart
+/// await stitchdb.analytics.start(
+///   release: '1.4.0',
+///   store: FileAnalyticsStore('${Directory.systemTemp.path}/my-app-analytics'),
+/// );
+/// ```
+class FileAnalyticsStore extends FileCrashStore {
+  FileAnalyticsStore(super.directory);
 }

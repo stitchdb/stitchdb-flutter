@@ -1,6 +1,6 @@
 name: stitchdb_flutter
 description: Flutter integration for StitchDB. This package makes it simple for developers to build secure and scalable products.
-version: 1.1.0
+version: 1.2.0
 homepage: 'https://stitchdb.com/docs/sdk/flutter'
 repository: 'https://github.com/stitchdb/stitchdb-flutter'
 issue_tracker: 'https://github.com/stitchdb/stitchdb-flutter/issues'
@@ -26,7 +26,7 @@ dependencies:
   http: ^1.6.0
   meta: ^1.16.0
   passkeys_platform_interface: ^2.8.0
-  stitchdb: ^1.1.0
+  stitchdb: ^1.2.0
   stitchdb_common: ^1.0.0
   url_launcher: ^6.3.2
   shared_preferences: ^2.5.5

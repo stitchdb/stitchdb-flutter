@@ -56,6 +56,7 @@ class StitchClient {
   final String _functionsUrl;
   final String _syncUrl;
   final String _crashesUrl;
+  final String _analyticsUrl;
   final Map<String, String> _headers;
   final Client? _httpClient;
   late final Client _authHttpClient;
@@ -81,6 +82,16 @@ class StitchClient {
   /// stitchdb.crashes.captureException(error, stackTrace: stackTrace);
   /// ```
   late final CrashesClient crashes;
+
+  /// Product analytics: the events your app tracks, linked to the signed-in
+  /// user (an anonymous id before sign-in). Nothing is sent before
+  /// `analytics.start()`.
+  ///
+  /// ```dart
+  /// await stitchdb.analytics.start(release: '1.4.0');
+  /// stitchdb.analytics.track('purchase', {'plan': 'pro'});
+  /// ```
+  late final AnalyticsClient analytics;
   StreamSubscription<AuthState>? _authStateSubscription;
   final YAJsonIsolate _isolate;
   final bool _hasCustomIsolate;
@@ -158,6 +169,7 @@ class StitchClient {
        _functionsUrl = '$stitchUrl/functions/v1',
        _syncUrl = '$stitchUrl/sync/v1',
        _crashesUrl = '$stitchUrl/crashes/v1',
+       _analyticsUrl = '$stitchUrl/analytics/v1',
        _postgrestOptions = postgrestOptions,
        _headers = {
          ...Constants.defaultHeaders,
@@ -207,6 +219,12 @@ class StitchClient {
       _authHttpClient,
       () => this.headers,
       recordingHttpClient,
+    );
+    analytics = AnalyticsClient(
+      _analyticsUrl,
+      _authHttpClient,
+      () => this.headers,
+      accessToken == null ? _onUserChange : null,
     );
     if (accessToken == null) {
       _log.config(
@@ -355,6 +373,7 @@ class StitchClient {
   Future<void> dispose() async {
     _log.fine('Dispose StitchClient');
     crashes.stop();
+    analytics.stop();
     await realtime.disconnect();
     await _authStateSubscription?.cancel();
     await functions.dispose();
@@ -454,6 +473,19 @@ class StitchClient {
     };
     final mergedHeaders = {...defaultHeaders, ..._headers};
     return mergedHeaders;
+  }
+
+  /// Calls [onChange] when the user signs in or out; returns a function that
+  /// stops listening.
+  void Function() _onUserChange(void Function() onChange) {
+    // ignore: invalid_use_of_internal_member
+    final sub = auth.onAuthStateChangeSync.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.signedOut) {
+        onChange();
+      }
+    }, onError: (_) {});
+    return () => unawaited(sub.cancel());
   }
 
   void _listenForAuthEvents() {

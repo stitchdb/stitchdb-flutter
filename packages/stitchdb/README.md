@@ -70,6 +70,21 @@ void main() => stitchdb.crashes.runGuarded(() async {   // uncaught errors (sync
 - Consent: nothing is captured, recorded or sent before `start()`; `stop()` ends it. `beforeSend` sees every report and can change it or return `null` to drop it, for example while the user has not agreed.
 - Sending: reports are queued and sent in the background (`await crashes.flush()` to wait). Reports that cannot be sent (offline, the app exiting) are kept in the store and sent on the next `start()`; the default `MemoryCrashStore` loses them when the process exits, so pass `store: FileCrashStore('<directory>')` (dart:io) or your own `CrashStore`. Once a day `start()` also sends a session, used for the crash-free users rate.
 
+## Analytics
+
+`analytics` sends the events your app tracks to Studio › Analytics, linked to the signed-in user (an anonymous id kept on the device before sign-in, merged into the user when they sign in), for active users, funnels, retention and breakdowns by release, platform, OS and country. Turn analytics on for the project in Studio › Analytics first.
+
+```dart
+await stitchdb.analytics.start(release: '1.4.0', store: FileAnalyticsStore('<directory>'));
+stitchdb.analytics.track('purchase', {'plan': 'pro', 'amount': 29});
+await stitchdb.analytics.optOut(); // the user does not want to be tracked
+```
+
+- Events: names are letters, digits, `_ $ . : - /` and spaces, up to 64 characters; props are a JSON object of at most 8 KB (flat values are easiest to break down by). Invalid events are dropped with a log message (logger `stitchdb.analytics`). `beforeSend` sees every event and can change it or return `null` to drop it. Passwords, tokens, keys and e-mail addresses are removed by StitchDB before anything is stored.
+- Sending: nothing is sent before `start()`; events tracked earlier wait in memory (up to 100). After `start()` events are sent in batches every `flushInterval` (10 s), when 20 are waiting and when the user signs in or out; `await analytics.flush()` sends now. While offline they are kept in the store (up to 1000, the oldest dropped) and sent later; the default `MemoryAnalyticsStore` loses them when the process exits, so pass `FileAnalyticsStore('<directory>')` (dart:io), any `CrashStore`, or your own `AnalyticsStore`. `stop()` stops sending; waiting events stay in the store.
+- Consent: `optOut()` deletes the signed-in user's events on the server and stops tracking; it is remembered in the store (`isOptedOut`). `optIn()` tracks again. `anonymousId` is the id of this device before sign-in.
+- If analytics is off for the project, the queue is cleared and nothing more is sent until the next `start()`.
+
 ## Docs
 
 The docs can be found on the official StitchDB website.

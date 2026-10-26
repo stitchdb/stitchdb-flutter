@@ -508,6 +508,27 @@ stitchdb.crashes.addBreadcrumb(type: 'navigation', message: '/checkout');
 
 For a `StitchClient` you create yourself, call `configureFlutterCrashes(client)` before `client.crashes.start()`.
 
+### <a id="analytics"></a>Analytics
+
+Events your app tracks go to Studio › Analytics, linked to the signed-in user (an anonymous id kept on the device before sign-in, merged into the user when they sign in), for active users, funnels, retention and breakdowns by release, platform, OS and country. Turn analytics on for the project in Studio › Analytics, then start it once, after `Stitch.initialize`:
+
+```dart
+await Stitch.initialize(url: '...', anonKey: '...');
+final stitchdb = Stitch.instance.client;
+
+await stitchdb.analytics.start(release: '1.4.0');
+stitchdb.analytics.track('purchase', {'plan': 'pro', 'amount': 29});
+
+// The user does not want to be tracked: their events are deleted.
+await stitchdb.analytics.optOut();
+```
+
+- Events: names are letters, digits, `_ $ . : - /` and spaces, up to 64 characters; props are a JSON object of at most 8 KB. Invalid events are dropped with a log message. `beforeSend` can change an event or return `null` to drop it. Each batch carries the anonymous id, your release, the platform `flutter`, the OS and the region of the device locale as the country. Passwords, tokens, keys and e-mail addresses are removed by StitchDB before anything is stored.
+- Sending: nothing is sent before `start()`; events tracked earlier wait in memory (up to 100). After that, batches go out every 10 seconds (`flushInterval`), when 20 events are waiting, when the user signs in or out and when the app goes to the background. Waiting events are kept in SharedPreferences (up to 1000), so events tracked offline are sent even after the app is killed.
+- Consent: `optOut()` is remembered on the device (`isOptedOut`); `track` does nothing until `optIn()`. `stop()` stops sending and removes the background listener.
+
+For a `StitchClient` you create yourself, call `configureFlutterAnalytics(client)` before `client.analytics.start()`.
+
 ## <a id="deep-links"></a>Deep links
 
 ### Why do you need to setup deep links

@@ -9,9 +9,10 @@ export 'package:stitchdb_postgrest/stitchdb_postgrest.dart' hide HttpMethod;
 export 'package:stitchdb_realtime/stitchdb_realtime.dart';
 export 'package:stitchdb_storage/stitchdb_storage.dart';
 
+export 'src/analytics.dart' hide analyticsCountry, analyticsOs;
 export 'src/auth_user.dart';
-export 'src/crash_store.dart' show FileCrashStore;
-export 'src/crashes.dart';
+export 'src/crash_store.dart' show FileAnalyticsStore, FileCrashStore;
+export 'src/crashes.dart' hide crashUuid;
 export 'src/offline.dart';
 export 'src/realtime_client_options.dart';
 export 'src/remove_subscription_result.dart';

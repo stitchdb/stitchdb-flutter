@@ -1,3 +1,4 @@
+import 'analytics.dart';
 import 'crashes.dart';
 
 /// A [CrashStore] that keeps its data as files. Files are not available on
@@ -22,3 +23,10 @@ class FileCrashStore implements CrashStore {
 
 /// The locale of the device; unknown without dart:io.
 String? crashLocale() => null;
+
+/// An [AnalyticsStore] that keeps its data as files. Files are not available
+/// on this platform (web): use [MemoryAnalyticsStore] or your own
+/// [AnalyticsStore].
+class FileAnalyticsStore extends FileCrashStore {
+  FileAnalyticsStore(super.directory);
+}

@@ -7,6 +7,7 @@ import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 import 'package:stitchdb/stitchdb.dart';
 import 'package:stitchdb_common/stitchdb_common.dart';
+import 'package:stitchdb_flutter/src/analytics.dart';
 import 'package:stitchdb_flutter/src/constants.dart';
 import 'package:stitchdb_flutter/src/crash_reporting.dart';
 import 'package:stitchdb_flutter/src/flutter_auth_client_options.dart';
@@ -272,6 +273,13 @@ class Stitch {
       client,
       storeName:
           'stitchdb-${Uri.parse(stitchUrl).host.split('.').first}-crashes',
+    );
+    // `client.analytics.start()` sends as a Flutter app, keeps waiting events
+    // in SharedPreferences and flushes when the app goes to the background.
+    configureFlutterAnalytics(
+      client,
+      storeName:
+          'stitchdb-${Uri.parse(stitchUrl).host.split('.').first}-analytics',
     );
 
     // Close any previous realtime client that may still be connected due to

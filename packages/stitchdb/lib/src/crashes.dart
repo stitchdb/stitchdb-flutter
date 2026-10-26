@@ -6,6 +6,7 @@ import 'package:http/http.dart';
 import 'package:meta/meta.dart';
 import 'package:stitchdb_common/stitchdb_common.dart';
 
+import 'analytics.dart';
 import 'crash_http_client.dart';
 import 'crash_store.dart';
 import 'version.dart';
@@ -25,11 +26,15 @@ const _batchSize = 20;
 
 /// Where crash reporting keeps the reports waiting to be sent, the install id
 /// and the day the last session was sent. Values are strings (JSON).
-abstract class CrashStore {
+///
+/// Every [CrashStore] can also be used as an [AnalyticsStore].
+abstract class CrashStore implements AnalyticsStore {
   /// The value under [key], or `null` when there is none.
+  @override
   Future<String?> get(String key);
 
   /// Stores [value] under [key]; `null` removes it.
+  @override
   Future<void> set(String key, String? value);
 
   /// Like [set], but used while the app crashes: writes synchronously where
@@ -413,7 +418,7 @@ class CrashesClient {
       id = await s.get('install');
     } catch (_) {}
     if (id == null || id.isEmpty) {
-      id = _uuid();
+      id = crashUuid();
       try {
         await s.set('install', id);
       } catch (_) {}
@@ -603,7 +608,9 @@ String _cut(String s) => s.length > 2000 ? s.substring(0, 2000) : s;
 
 String _now() => DateTime.now().toUtc().toIso8601String();
 
-String _uuid() {
+/// A random (version 4) UUID.
+@internal
+String crashUuid() {
   final r = Random.secure();
   final b = List<int>.generate(16, (_) => r.nextInt(256));
   b[6] = (b[6] & 0x0f) | 0x40;
