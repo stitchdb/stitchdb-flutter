@@ -481,6 +481,33 @@ await stitchdb.storage
 final data = await stitchdb.functions.invoke('get_countries');
 ```
 
+### <a id="crash-reporting"></a>Crash reporting
+
+Errors are reported to Studio › Crashes, grouped into issues with the stack trace, your release, the device, the signed-in user and the last API calls and actions before the error. Turn crash reporting on for the project in Studio › Crashes, then start it once, after `Stitch.initialize`:
+
+```dart
+await Stitch.initialize(url: '...', anonKey: '...');
+final stitchdb = Stitch.instance.client;
+
+await stitchdb.crashes.start(
+  release: '1.4.0',
+  beforeSend: (report) => userAgreed ? report : null, // consent
+);
+
+try {
+  await checkout();
+} catch (e, s) {
+  stitchdb.crashes.captureException(e, stackTrace: s, context: {'step': 'payment'});
+}
+stitchdb.crashes.addBreadcrumb(type: 'navigation', message: '/checkout');
+```
+
+- Captured: uncaught errors from `FlutterError.onError` (build, layout, paint) and `PlatformDispatcher.instance.onError` (uncaught async errors) unless `captureUnhandled: false`; handlers set before `start()` keep being called. Also errors you pass to `captureException` or `captureMessage`, every API call of the client as a breadcrumb (method, path, query parameter names without values, status, error code, duration; no bodies), your own breadcrumbs, and the OS, its version, the locale and the screen size. Passwords, tokens, keys and e-mail addresses are removed by StitchDB before anything is stored.
+- Consent: nothing is captured, recorded or sent before `start()`; `stop()` ends it and removes the handlers. `beforeSend` sees every report and can change it or return `null` to drop it.
+- Sending: reports are kept in SharedPreferences until they are sent, in the background. Reports from a crash, or while the device is offline, are sent on the next launch, when `start()` is called again. Once a day `start()` also sends a session, used for the crash-free users rate.
+
+For a `StitchClient` you create yourself, call `configureFlutterCrashes(client)` before `client.crashes.start()`.
+
 ## <a id="deep-links"></a>Deep links
 
 ### Why do you need to setup deep links

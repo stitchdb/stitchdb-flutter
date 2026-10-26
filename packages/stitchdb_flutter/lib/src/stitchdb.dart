@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import 'package:stitchdb/stitchdb.dart';
 import 'package:stitchdb_common/stitchdb_common.dart';
 import 'package:stitchdb_flutter/src/constants.dart';
+import 'package:stitchdb_flutter/src/crash_reporting.dart';
 import 'package:stitchdb_flutter/src/flutter_auth_client_options.dart';
 import 'package:stitchdb_flutter/src/local_storage.dart';
 import 'package:stitchdb_flutter/src/realtime_lifecycle_options.dart';
@@ -264,6 +265,13 @@ class Stitch {
       authOptions: authOptions,
       tracePropagationOptions: tracePropagationOptions,
       accessToken: accessToken,
+    );
+    // `client.crashes.start()` reports as a Flutter app and keeps unsent
+    // reports in SharedPreferences.
+    configureFlutterCrashes(
+      client,
+      storeName:
+          'stitchdb-${Uri.parse(stitchUrl).host.split('.').first}-crashes',
     );
 
     // Close any previous realtime client that may still be connected due to

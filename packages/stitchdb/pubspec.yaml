@@ -1,6 +1,6 @@
 name: stitchdb
 description: A dart client for StitchDB. This client makes it simple for developers to build secure and scalable products.
-version: 1.0.0
+version: 1.1.0
 homepage: 'https://stitchdb.com/docs/sdk/flutter'
 repository: 'https://github.com/stitchdb/stitchdb-flutter'
 issue_tracker: 'https://github.com/stitchdb/stitchdb-flutter/issues'

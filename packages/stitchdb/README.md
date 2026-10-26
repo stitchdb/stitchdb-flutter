@@ -50,6 +50,26 @@ await offline.close(clear: true);   // e.g. on sign-out
 
 A local write wins over pulled changes until it is pushed; if the server rejects it or it loses a conflict, the local copy takes the server row and a `ConflictEvent` is emitted. The default `MemoryOfflineStore` is lost when the process exits; implement `OfflineStore` to persist it (in Flutter, `stitchdb_flutter` ships `SharedPreferencesOfflineStore`).
 
+## Crash reporting
+
+`crashes` reports errors to Studio › Crashes, grouped into issues with the stack trace, your release, the device, the signed-in user and the last API calls and actions before the error ("crashed right after GET /rest/v1/orders returned 500"). Turn crash reporting on for the project in Studio › Crashes first.
+
+```dart
+void main() => stitchdb.crashes.runGuarded(() async {   // uncaught errors (sync and async)
+  await stitchdb.crashes.start(release: '1.4.0');
+  try {
+    await checkout();
+  } catch (e, s) {
+    stitchdb.crashes.captureException(e, stackTrace: s, context: {'step': 'payment'});
+  }
+  stitchdb.crashes.addBreadcrumb(type: 'ui', message: 'tapped Checkout');
+});
+```
+
+- Captured: errors you pass to `captureException` (the current stack when you pass none) or `captureMessage`, uncaught errors inside `runGuarded`, every API call of the client as a breadcrumb (method, path, query parameter names without their values, status, error code, duration; no bodies), your own breadcrumbs, the OS, its version and the locale. Passwords, tokens, keys and e-mail addresses are removed by StitchDB before anything is stored.
+- Consent: nothing is captured, recorded or sent before `start()`; `stop()` ends it. `beforeSend` sees every report and can change it or return `null` to drop it, for example while the user has not agreed.
+- Sending: reports are queued and sent in the background (`await crashes.flush()` to wait). Reports that cannot be sent (offline, the app exiting) are kept in the store and sent on the next `start()`; the default `MemoryCrashStore` loses them when the process exits, so pass `store: FileCrashStore('<directory>')` (dart:io) or your own `CrashStore`. Once a day `start()` also sends a session, used for the crash-free users rate.
+
 ## Docs
 
 The docs can be found on the official StitchDB website.

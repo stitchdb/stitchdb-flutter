@@ -10,6 +10,7 @@ import 'package:yet_another_json_isolate/yet_another_json_isolate.dart';
 import 'api_key.dart';
 import 'auth_http_client.dart';
 import 'counter.dart';
+import 'crash_http_client.dart';
 import 'trace_http_client.dart';
 
 /// {@template stitch_client}
@@ -54,6 +55,7 @@ class StitchClient {
   final String _storageUrl;
   final String _functionsUrl;
   final String _syncUrl;
+  final String _crashesUrl;
   final Map<String, String> _headers;
   final Client? _httpClient;
   late final Client _authHttpClient;
@@ -69,6 +71,16 @@ class StitchClient {
   late final StitchStorageClient storage;
   late final RealtimeClient realtime;
   late final PostgrestClient rest;
+
+  /// Crash and error reporting: uncaught errors and errors you report, with
+  /// the last API calls and actions as breadcrumbs. Nothing is captured or
+  /// sent before `crashes.start()`.
+  ///
+  /// ```dart
+  /// await stitchdb.crashes.start(release: '1.4.0');
+  /// stitchdb.crashes.captureException(error, stackTrace: stackTrace);
+  /// ```
+  late final CrashesClient crashes;
   StreamSubscription<AuthState>? _authStateSubscription;
   final YAJsonIsolate _isolate;
   final bool _hasCustomIsolate;
@@ -145,6 +157,7 @@ class StitchClient {
        _storageUrl = '$stitchUrl/storage/v1',
        _functionsUrl = '$stitchUrl/functions/v1',
        _syncUrl = '$stitchUrl/sync/v1',
+       _crashesUrl = '$stitchUrl/crashes/v1',
        _postgrestOptions = postgrestOptions,
        _headers = {
          ...Constants.defaultHeaders,
@@ -161,7 +174,10 @@ class StitchClient {
             stitchUrl,
           )
         : baseHttpClient;
-    _stitchAuthHttpClient = tracedHttpClient;
+    // Every request goes through here, so crash reports can show the last
+    // API calls.
+    final recordingHttpClient = CrashRecordingClient(tracedHttpClient);
+    _stitchAuthHttpClient = recordingHttpClient;
     _authInstance = _initStitchAuthClient(
       autoRefreshToken: authOptions.autoRefreshToken,
       stitchAuthAsyncStorage: authOptions.pkceAsyncStorage,
@@ -169,12 +185,12 @@ class StitchClient {
     );
     _authHttpClient = AuthHttpClient(
       _stitchKey,
-      tracedHttpClient,
+      recordingHttpClient,
       _getAccessToken,
     );
     _functionsHttpClient = AuthHttpClient(
       _stitchKey,
-      tracedHttpClient,
+      recordingHttpClient,
       _getAccessToken,
       omitNewApiKeyAsBearer: true,
     );
@@ -186,6 +202,12 @@ class StitchClient {
       storageOptions.useNewHostname,
     );
     realtime = _initRealtimeClient(options: realtimeClientOptions);
+    crashes = CrashesClient(
+      _crashesUrl,
+      _authHttpClient,
+      () => this.headers,
+      recordingHttpClient,
+    );
     if (accessToken == null) {
       _log.config(
         'Initialize StitchClient v$version with no custom access token',
@@ -332,6 +354,7 @@ class StitchClient {
 
   Future<void> dispose() async {
     _log.fine('Dispose StitchClient');
+    crashes.stop();
     await realtime.disconnect();
     await _authStateSubscription?.cancel();
     await functions.dispose();
